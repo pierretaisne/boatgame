@@ -704,14 +704,6 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
         enableDamping={true}
         dampingFactor={0.05}
       />
-
-      <div className="absolute bottom-8 left-8 z-50">
-        <BulletReload 
-          isReloading={isReloading}
-          onReloadComplete={handleReloadComplete}
-        />
-      </div>
-      <Joystick onMove={() => {}} />
     </>
   );
 }
@@ -793,6 +785,30 @@ export default function Game() {
 
   return (
     <div className="h-screen w-screen relative">
+      <Canvas 
+        camera={{ 
+          position: [0, 20, 40],
+          fov: 60,
+          near: 0.1,
+          far: 1000
+        }}
+      >
+        <Suspense fallback={null}>
+          <GameScene 
+            onGameStart={(name: string) => {
+              setUsername(name);
+              setGameStarted(true);
+            }}
+            onCoinsChange={handleCoinsChange}
+            gameStarted={gameStarted}
+            playerShip={playerShip}
+            onPlayerShipUpdate={setPlayerShip}
+            onBulletHit={handleBulletHit}
+            isReloading={isReloading}
+          />
+        </Suspense>
+      </Canvas>
+
       {gameStarted && (
         <>
           <div className="absolute top-5 right-5 z-50">
@@ -854,29 +870,6 @@ export default function Game() {
           <Joystick onMove={handleJoystickMove} />
         </>
       )}
-      <Canvas 
-        camera={{ 
-          position: [0, 20, 40],
-          fov: 60,
-          near: 0.1,
-          far: 1000
-        }}
-      >
-        <Suspense fallback={null}>
-          <GameScene 
-            onGameStart={(name: string) => {
-              setUsername(name);
-              setGameStarted(true);
-            }}
-            onCoinsChange={handleCoinsChange}
-            gameStarted={gameStarted}
-            playerShip={playerShip}
-            onPlayerShipUpdate={setPlayerShip}
-            onBulletHit={handleBulletHit}
-            isReloading={isReloading}
-          />
-        </Suspense>
-      </Canvas>
     </div>
   );
 }
