@@ -3,6 +3,7 @@ import { OrbitControls, Sky } from '@react-three/drei';
 import React, { Suspense, useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
+import { io, Socket } from 'socket.io-client';
 import Ship from './Ship';
 import Bullet from './Bullet';
 import Explosion from './Explosion';
@@ -12,6 +13,11 @@ import { ShipControls } from '../hooks/useShipControls';
 import UsernameInput from './UsernameInput';
 import CoinDisplay from './CoinDisplay';
 import Joystick from './Joystick';
+
+// Add these constants at the top of the file
+const POSITION_UPDATE_RATE = 50; // 20 updates per second
+const BULLET_UPDATE_RATE = 100; // 10 updates per second
+const STATE_UPDATE_INTERVAL = 100; // 10 updates per second
 
 function Ocean() {
   const [water, setWater] = useState<Water | null>(null);
@@ -105,6 +111,20 @@ interface AIShipState extends ShipControls {
   };
 }
 
+interface Player {
+  id: string;
+  username: string;
+  ship: ShipControls;
+  health: ShipHealth;
+  coins: number;
+}
+
+interface MultiplayerState {
+  players: { [key: string]: Player };
+  bullets: BulletData[];
+  coins: { id: string; position: [number, number, number] }[];
+}
+
 interface GameSceneProps {
   onGameStart: (username: string) => void;
   onCoinsChange: (coins: number) => void;
@@ -122,6 +142,12 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
   const [splashes, setSplashes] = useState<{ id: number; position: [number, number, number] }[]>([]);
   const [nextSplashId, setNextSplashId] = useState(0);
   const controlsRef = useRef<any>();
+  const socketRef = useRef<Socket | null>(null);
+  const [multiplayerState, setMultiplayerState] = useState<MultiplayerState>({
+    players: {},
+    bullets: [],
+    coins: []
+  });
   
   // Player ship state
   const [playerHealth, setPlayerHealth] = useState<ShipHealth>({
@@ -222,90 +248,132 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
     { position: [120, -120], radius: 50 },
   ];
 
-  // Update player ship position
+  // Add throttling refs
+  const lastPositionUpdate = useRef<number>(0);
+  const lastBulletUpdate = useRef<number>(0);
+  const lastStateUpdate = useRef<number>(0);
+
+  useEffect(() => {
+    if (gameStarted) {
+      socketRef.current = io('http://localhost:3001');
+
+      socketRef.current.on('connect', () => {
+        console.log('Connected to server');
+      });
+
+      socketRef.current.on('disconnect', () => {
+        console.log('Disconnected from server');
+      });
+
+      // Handle game state updates with throttling
+      socketRef.current.on('gameState', (state: MultiplayerState) => {
+        const now = Date.now();
+        if (now - lastStateUpdate.current >= STATE_UPDATE_INTERVAL) {
+          setMultiplayerState(state);
+          lastStateUpdate.current = now;
+        }
+      });
+
+      // Handle player joined with throttling
+      socketRef.current.on('playerJoined', (player: Player) => {
+        const now = Date.now();
+        if (now - lastStateUpdate.current >= STATE_UPDATE_INTERVAL) {
+          setMultiplayerState(prev => ({
+            ...prev,
+            players: {
+              ...prev.players,
+              [player.id]: player
+            }
+          }));
+          lastStateUpdate.current = now;
+        }
+      });
+
+      // Handle player left with throttling
+      socketRef.current.on('playerLeft', (playerId: string) => {
+        const now = Date.now();
+        if (now - lastStateUpdate.current >= STATE_UPDATE_INTERVAL) {
+          setMultiplayerState(prev => {
+            const newPlayers = { ...prev.players };
+            delete newPlayers[playerId];
+            return {
+              ...prev,
+              players: newPlayers
+            };
+          });
+          lastStateUpdate.current = now;
+        }
+      });
+
+      // Handle bullet updates with throttling
+      socketRef.current.on('bulletUpdate', (bullets: BulletData[]) => {
+        const now = Date.now();
+        if (now - lastBulletUpdate.current >= BULLET_UPDATE_RATE) {
+          setBullets(bullets);
+          lastBulletUpdate.current = now;
+        }
+      });
+
+      // Handle coin updates with throttling
+      socketRef.current.on('coinUpdate', (coins: { id: string; position: [number, number, number] }[]) => {
+        const now = Date.now();
+        if (now - lastStateUpdate.current >= STATE_UPDATE_INTERVAL) {
+          setMultiplayerState(prev => ({
+            ...prev,
+            coins
+          }));
+          lastStateUpdate.current = now;
+        }
+      });
+
+      return () => {
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+      };
+    }
+  }, [gameStarted]);
+
+  // Update player ship position and sync with server with throttling
   const handleShipUpdate = (newState: ShipControls) => {
     onPlayerShipUpdate(newState);
+    if (socketRef.current) {
+      const now = Date.now();
+      if (now - lastPositionUpdate.current >= POSITION_UPDATE_RATE) {
+        socketRef.current.emit('playerMove', newState);
+        lastPositionUpdate.current = now;
+      }
+    }
   };
 
-  // Update camera target to follow player ship and handle health regeneration
-  useFrame(() => {
-    if (controlsRef.current) {
-      // Smoothly move the camera target to follow the ship
-      const currentTarget = controlsRef.current.target;
-      const targetX = playerShip.position[0];
-      const targetZ = playerShip.position[2];
-      
-      // Smooth interpolation
-      currentTarget.x += (targetX - currentTarget.x) * 0.1;
-      currentTarget.z += (targetZ - currentTarget.z) * 0.1;
-    }
-
-    // Handle health regeneration in safe zone
-    if (gameStarted && isInSafeZone(playerShip.position)) {
-      const currentTime = Date.now();
-      if (currentTime - lastRegenTime.current >= 5000) { // Check if 5 seconds have passed
-        const regenAmount = Math.floor(playerHealth.maxHealth * 0.1); // 10% of max health
-        setPlayerHealth(prev => ({
-          ...prev,
-          currentHealth: Math.min(prev.maxHealth, prev.currentHealth + regenAmount)
-        }));
-        lastRegenTime.current = currentTime;
-      }
-    }
-  });
-
-  // Add keyboard controls for firing
-  useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (!gameStarted) return;
-      
-      if (event.key.toLowerCase() === 'q') {
-        // Fire from left side
-        handleFire(playerShip.position, playerShip.rotation, true);
-      } else if (event.key.toLowerCase() === 'e') {
-        // Fire from right side
-        handleFire(playerShip.position, playerShip.rotation, false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [gameStarted, playerShip.position, playerShip.rotation]);
-
+  // Handle firing and sync with server
   const handleFire = (position: [number, number, number], rotation: number, isPortSide: boolean, isPlayerBullet: boolean = true) => {
-    // Calculate bullet velocity perpendicular to ship's orientation
-    const bulletSpeed = 80;
-    const perpendicularAngle = rotation + (isPortSide ? -Math.PI/2 : Math.PI/2);
-    
-    // Add slight random spread to make not all bullets hit
-    const spreadAngle = (Math.random() - 0.5) * 0.2;
-    const finalAngle = perpendicularAngle + spreadAngle;
-    
-    const velocity: [number, number, number] = [
-      Math.sin(finalAngle) * bulletSpeed,
-      5,
-      Math.cos(finalAngle) * bulletSpeed
-    ];
+    const bulletId = nextBulletId;
+    setNextBulletId(prev => prev + 1);
 
-    // Offset the bullet spawn position perpendicular to the ship
-    const spawnOffset = 3;
-    const offsetPosition: [number, number, number] = [
-      position[0] + Math.sin(finalAngle) * spawnOffset,
-      position[1] + 1,
-      position[2] + Math.cos(finalAngle) * spawnOffset
-    ];
-
-    const newBullet: BulletData = {
-      id: nextBulletId,
-      position: offsetPosition,
-      rotation: finalAngle,
+    const bullet: BulletData = {
+      id: bulletId,
+      position,
+      rotation,
       isPortSide,
-      velocity,
+      velocity: [
+        Math.sin(rotation) * (isPortSide ? -1 : 1) * 2,
+        0,
+        Math.cos(rotation) * (isPortSide ? -1 : 1) * 2
+      ],
       isPlayerBullet
     };
 
-    setBullets(prev => [...prev, newBullet]);
-    setNextBulletId(prev => prev + 1);
+    setBullets(prev => [...prev, bullet]);
+
+    if (socketRef.current) {
+      socketRef.current.emit('fire', bullet);
+    }
+
+    // Remove bullet after 5 seconds
+    setTimeout(() => {
+      removeBullet(bulletId);
+    }, 5000);
   };
 
   const removeBullet = (id: number) => {
@@ -328,6 +396,12 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
   useFrame((state, delta) => {
     if (!gameStarted) return;
 
+    const now = Date.now();
+    if (now - lastStateUpdate.current < STATE_UPDATE_INTERVAL) {
+      return;
+    }
+
+    lastStateUpdate.current = now;
     setAiShips(prevShips => prevShips.map((ship, shipIndex) => {
       if (ship.isDestroyed) return ship;
 
@@ -462,6 +536,14 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
 
   // Update bullet positions and check collisions
   useFrame((state, delta) => {
+    if (!gameStarted) return;
+
+    const now = Date.now();
+    if (now - lastBulletUpdate.current < BULLET_UPDATE_RATE) {
+      return;
+    }
+
+    lastBulletUpdate.current = now;
     setBullets(prev => prev.map(bullet => {
       const newPosition: [number, number, number] = [
         bullet.position[0] + bullet.velocity[0] * delta,
@@ -583,107 +665,122 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
 
   return (
     <>
-      <Sky 
-        turbidity={10}
-        rayleigh={2}
-        mieCoefficient={0.005}
-        mieDirectionalG={0.8}
-        sunPosition={[100, 20, 100]}
-      />
-      <ambientLight intensity={1} />
-      <pointLight position={[10, 10, 10]} intensity={2} />
-      <directionalLight
-        position={[5, 5, 5]}
-        intensity={1}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      
-      <Ocean />
+      <Suspense fallback={null}>
+        <Sky />
+        <Ocean />
+        <ambientLight intensity={0.5} />
+        <directionalLight
+          position={[10, 10, 5]}
+          intensity={1}
+          castShadow
+        />
+        
+        {/* Render player ship */}
+        <Ship
+          ref={playerShipRef}
+          position={playerShip.position}
+          rotation={playerShip.rotation}
+          speed={playerShip.speed}
+          onUpdate={handleShipUpdate}
+          onFire={handleFire}
+          isSelected={true}
+          onClick={() => {}}
+        />
 
-      {/* Render safe zones */}
-      {safeZones.map((zone, index) => (
-        <SafeZoneCircle key={index} {...zone} />
-      ))}
+        {/* Render other players' ships */}
+        {Object.values(multiplayerState.players).map((player) => (
+          player.id !== socketRef.current?.id && (
+            <Ship
+              key={player.id}
+              position={player.ship.position}
+              rotation={player.ship.rotation}
+              speed={player.ship.speed}
+              isSelected={false}
+              onClick={() => {}}
+              onFire={() => {}}
+            />
+          )
+        ))}
 
-      {!gameStarted ? (
-        <UsernameInput onSubmit={onGameStart} />
-      ) : (
-        <>
-          <Ship 
-            {...playerShip}
-            isSelected={true}
-            onClick={() => setSelectedShip(0)}
-            onFire={() => {}}
-            onUpdate={handleShipUpdate}
-            ref={playerShipRef}
+        {/* Render AI ships */}
+        {aiShips.map((ship, index) => (
+          !ship.isDestroyed && (
+            <Ship
+              key={`ai-${index}`}
+              ref={ship.ref}
+              position={ship.position}
+              rotation={ship.rotation}
+              speed={ship.speed}
+              onFire={handleFire}
+              isSelected={false}
+              onClick={() => {}}
+            />
+          )
+        ))}
+
+        {/* Render bullets */}
+        {bullets.map((bullet) => (
+          <Bullet
+            key={bullet.id}
+            position={bullet.position}
+            rotation={bullet.rotation}
+            onHit={() => removeBullet(bullet.id)}
           />
-          <HealthBar
-            maxHealth={playerHealth.maxHealth}
-            currentHealth={playerHealth.currentHealth}
-            position={[playerShip.position[0], 12, playerShip.position[2]]}
+        ))}
+
+        {/* Render coins */}
+        {multiplayerState.coins.map((coin) => (
+          <mesh key={coin.id} position={coin.position}>
+            <sphereGeometry args={[0.5, 32, 32]} />
+            <meshStandardMaterial color="gold" />
+          </mesh>
+        ))}
+
+        {/* Render safe zones */}
+        {safeZones.map((zone, index) => (
+          <SafeZoneCircle key={index} position={zone.position} radius={zone.radius} />
+        ))}
+
+        {/* Render explosions */}
+        {showExplosion && (
+          <Explosion
+            position={explosionPosition}
+            onComplete={handleExplosionComplete}
           />
+        )}
 
-          {aiShips.map((ship, index) => (
-            <React.Fragment key={index}>
-              <Ship 
-                position={ship.position}
-                rotation={ship.rotation}
-                speed={ship.speed}
-                isSelected={false}
-                onClick={() => {}}
-                onFire={() => {}}
-                ref={ship.ref}
-                isDestroyed={ship.isDestroyed}
-              />
-              {!ship.isDestroyed && (
-                <HealthBar
-                  maxHealth={ship.health.maxHealth}
-                  currentHealth={ship.health.currentHealth}
-                  position={[ship.position[0], 12, ship.position[2]]}
-                />
-              )}
-            </React.Fragment>
-          ))}
+        {/* Render water splashes */}
+        {splashes.map((splash) => (
+          <WaterSplash
+            key={splash.id}
+            position={splash.position}
+            onComplete={() => removeSplash(splash.id)}
+          />
+        ))}
 
-          {showExplosion && (
-            <Explosion 
-              position={explosionPosition}
-              onComplete={handleExplosionComplete}
-            />
-          )}
+        {/* Render health bars */}
+        <HealthBar
+          position={[0, 2, 0]}
+          currentHealth={playerHealth.currentHealth}
+          maxHealth={playerHealth.maxHealth}
+        />
 
-          {splashes.map(splash => (
-            <WaterSplash
-              key={splash.id}
-              position={splash.position}
-              onComplete={() => removeSplash(splash.id)}
-            />
-          ))}
+        {/* Render coin display */}
+        <CoinDisplay 
+          coins={multiplayerState.players[socketRef.current?.id || '']?.coins || 0} 
+          username={socketRef.current?.id || 'Player'}
+        />
 
-          {bullets.map(bullet => (
-            <Bullet
-              key={bullet.id}
-              position={bullet.position}
-              rotation={bullet.rotation}
-              onHit={() => removeBullet(bullet.id)}
-            />
-          ))}
-        </>
-      )}
-
-      <OrbitControls 
-        ref={controlsRef}
-        enablePan={false}
-        minDistance={15}
-        maxDistance={50}
-        maxPolarAngle={Math.PI / 2}
-        minPolarAngle={Math.PI / 6}
-        target={[playerShip.position[0], 0, playerShip.position[2]]}
-        enableDamping={true}
-        dampingFactor={0.05}
-      />
+        <OrbitControls
+          ref={controlsRef}
+          target={[0, 0, 0]}
+          enablePan={false}
+          enableZoom={true}
+          minDistance={5}
+          maxDistance={50}
+          maxPolarAngle={Math.PI / 2}
+        />
+      </Suspense>
     </>
   );
 }
@@ -700,6 +797,11 @@ export default function Game() {
     rotation: 0,
     speed: 0,
   });
+
+  const handleUsernameSubmit = (name: string) => {
+    setUsername(name);
+    setGameStarted(true);
+  };
 
   const handleCoinsChange = (amount: number) => {
     setCoins(prev => prev + amount);
@@ -756,7 +858,9 @@ export default function Game() {
 
   return (
     <div className="h-screen w-screen relative">
-      {gameStarted && (
+      {!gameStarted ? (
+        <UsernameInput onSubmit={handleUsernameSubmit} />
+      ) : (
         <>
           <div className="absolute top-5 right-5 z-50">
             <div style={containerStyle}>
@@ -808,29 +912,24 @@ export default function Game() {
             </div>
           </div>
           <Joystick onMove={handleJoystickMove} />
+          <Canvas 
+            camera={{ 
+              position: [0, 20, 40],
+              fov: 60,
+              near: 0.1,
+              far: 1000
+            }}
+          >
+            <GameScene 
+              onGameStart={handleUsernameSubmit}
+              onCoinsChange={handleCoinsChange}
+              gameStarted={gameStarted}
+              playerShip={playerShip}
+              onPlayerShipUpdate={setPlayerShip}
+            />
+          </Canvas>
         </>
       )}
-      <Canvas 
-        camera={{ 
-          position: [0, 20, 40],
-          fov: 60,
-          near: 0.1,
-          far: 1000
-        }}
-      >
-        <Suspense fallback={null}>
-          <GameScene 
-            onGameStart={(name: string) => {
-              setUsername(name);
-              setGameStarted(true);
-            }}
-            onCoinsChange={handleCoinsChange}
-            gameStarted={gameStarted}
-            playerShip={playerShip}
-            onPlayerShipUpdate={setPlayerShip}
-          />
-        </Suspense>
-      </Canvas>
     </div>
   );
 }
