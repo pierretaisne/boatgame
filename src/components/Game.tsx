@@ -11,7 +11,6 @@ import HealthBar from './HealthBar';
 import { ShipControls } from '../hooks/useShipControls';
 import UsernameInput from './UsernameInput';
 import CoinDisplay from './CoinDisplay';
-import MobileControls from './MobileControls';
 
 function Ocean() {
   const [water, setWater] = useState<Water | null>(null);
@@ -224,36 +223,6 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
     { position: [-120, 120], radius: 40 },
     { position: [120, -120], radius: 50 },
   ];
-
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Add mobile detection
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Handle mobile controls
-  const handleMobileMove = (rotation: number, speed: number) => {
-    setPlayerShip(prev => ({
-      ...prev,
-      rotation,
-      speed
-    }));
-  };
-
-  const handleMobileFireLeft = () => {
-    handleFire(playerShip.position, playerShip.rotation, true);
-  };
-
-  const handleMobileFireRight = () => {
-    handleFire(playerShip.position, playerShip.rotation, false);
-  };
 
   // Update player ship position
   const handleShipUpdate = (newState: ShipControls) => {
@@ -716,16 +685,7 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
         target={[playerShip.position[0], 0, playerShip.position[2]]}
         enableDamping={true}
         dampingFactor={0.05}
-        enabled={!isMobile}
       />
-
-      {gameStarted && isMobile && (
-        <MobileControls
-          onMove={handleMobileMove}
-          onFireLeft={handleMobileFireLeft}
-          onFireRight={handleMobileFireRight}
-        />
-      )}
     </>
   );
 }
@@ -737,17 +697,6 @@ export default function Game() {
   const [speedLevel, setSpeedLevel] = useState(1);
   const [armorLevel, setArmorLevel] = useState(1);
   const [firingLevel, setFiringLevel] = useState(1);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   const handleCoinsChange = (amount: number) => {
     setCoins(prev => prev + amount);
@@ -804,10 +753,7 @@ export default function Game() {
             </div>
           </div>
 
-          <div style={{
-            ...statsContainerStyle,
-            bottom: isMobile ? '220px' : '20px',
-          }}>
+          <div style={statsContainerStyle}>
             <div style={containerStyle}>
               <img 
                 src="/lightning.png" 
@@ -843,7 +789,7 @@ export default function Game() {
       )}
       <Canvas 
         camera={{ 
-          position: isMobile ? [0, 30, 0] : [0, 20, 40],
+          position: [0, 20, 40],
           fov: 60,
           near: 0.1,
           far: 1000
