@@ -12,6 +12,7 @@ import { ShipControls } from '../hooks/useShipControls';
 import UsernameInput from './UsernameInput';
 import CoinDisplay from './CoinDisplay';
 import Joystick from './Joystick';
+import BulletReload from './BulletReload';
 
 function Ocean() {
   const [water, setWater] = useState<Water | null>(null);
@@ -111,9 +112,11 @@ interface GameSceneProps {
   gameStarted: boolean;
   playerShip: ShipControls;
   onPlayerShipUpdate: (newShip: ShipControls) => void;
+  onBulletHit: () => void;
+  isReloading: boolean;
 }
 
-function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlayerShipUpdate }: GameSceneProps) {
+function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlayerShipUpdate, onBulletHit, isReloading }: GameSceneProps) {
   const [selectedShip, setSelectedShip] = useState(0);
   const [bullets, setBullets] = useState<BulletData[]>([]);
   const [nextBulletId, setNextBulletId] = useState(0);
@@ -273,6 +276,8 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
   }, [gameStarted, playerShip.position, playerShip.rotation]);
 
   const handleFire = (position: [number, number, number], rotation: number, isPortSide: boolean, isPlayerBullet: boolean = true) => {
+    if (isPlayerBullet && isReloading) return; // Don't fire if reloading
+
     // Calculate bullet velocity perpendicular to ship's orientation
     const bulletSpeed = 80;
     const perpendicularAngle = rotation + (isPortSide ? -Math.PI/2 : Math.PI/2);
@@ -306,6 +311,10 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
 
     setBullets(prev => [...prev, newBullet]);
     setNextBulletId(prev => prev + 1);
+
+    if (isPlayerBullet) {
+      onBulletHit(); // Start reload timer when player fires
+    }
   };
 
   const removeBullet = (id: number) => {
@@ -581,6 +590,14 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
     setShowExplosion(false);
   };
 
+  const handleBulletHit = () => {
+    onBulletHit();
+  };
+
+  const handleReloadComplete = () => {
+    onBulletHit();
+  };
+
   return (
     <>
       <Sky 
@@ -667,7 +684,10 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
               key={bullet.id}
               position={bullet.position}
               rotation={bullet.rotation}
-              onHit={() => removeBullet(bullet.id)}
+              onHit={() => {
+                handleBulletHit();
+                removeBullet(bullet.id);
+              }}
             />
           ))}
         </>
@@ -684,6 +704,14 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlay
         enableDamping={true}
         dampingFactor={0.05}
       />
+
+      <div className="absolute bottom-8 left-8 z-50">
+        <BulletReload 
+          isReloading={isReloading}
+          onReloadComplete={handleReloadComplete}
+        />
+      </div>
+      <Joystick onMove={() => {}} />
     </>
   );
 }
@@ -700,6 +728,7 @@ export default function Game() {
     rotation: 0,
     speed: 0,
   });
+  const [isReloading, setIsReloading] = useState(false);
 
   const handleCoinsChange = (amount: number) => {
     setCoins(prev => prev + amount);
@@ -752,6 +781,14 @@ export default function Game() {
       rotation: angle,
       speed: speed * 20 // Adjust this multiplier to control speed
     }));
+  };
+
+  const handleBulletHit = () => {
+    setIsReloading(true);
+  };
+
+  const handleReloadComplete = () => {
+    setIsReloading(false);
   };
 
   return (
@@ -807,6 +844,13 @@ export default function Game() {
               </span>
             </div>
           </div>
+
+          <div className="absolute bottom-8 left-8 z-50">
+            <BulletReload 
+              isReloading={isReloading}
+              onReloadComplete={handleReloadComplete}
+            />
+          </div>
           <Joystick onMove={handleJoystickMove} />
         </>
       )}
@@ -828,6 +872,8 @@ export default function Game() {
             gameStarted={gameStarted}
             playerShip={playerShip}
             onPlayerShipUpdate={setPlayerShip}
+            onBulletHit={handleBulletHit}
+            isReloading={isReloading}
           />
         </Suspense>
       </Canvas>
