@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Html } from '@react-three/drei';
 
 interface UsernameInputProps {
   onSubmit: (username: string) => void;
@@ -15,27 +16,51 @@ const UsernameInput: React.FC<UsernameInputProps> = ({ onSubmit }) => {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
-        <h2 className="text-2xl font-bold mb-4 text-center">Enter Your Username</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Html center>
+      <div style={{
+        background: 'rgba(0, 0, 0, 0.8)',
+        padding: '2rem',
+        borderRadius: '10px',
+        color: 'white',
+        textAlign: 'center',
+        fontFamily: 'Arial, sans-serif',
+        minWidth: '300px'
+      }}>
+        <h2 style={{ marginBottom: '1.5rem', color: '#FFD700' }}>Enter Your Pirate Name</h2>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your username"
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
+            placeholder="Enter username"
+            style={{
+              padding: '0.5rem',
+              fontSize: '1rem',
+              borderRadius: '5px',
+              border: '2px solid #FFD700',
+              background: 'rgba(255, 255, 255, 0.9)',
+              color: '#000'
+            }}
           />
           <button
             type="submit"
-            className="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            disabled={!username.trim()}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '1rem',
+              borderRadius: '5px',
+              border: 'none',
+              background: username.trim() ? '#FFD700' : '#888',
+              color: '#000',
+              cursor: username.trim() ? 'pointer' : 'not-allowed',
+              fontWeight: 'bold'
+            }}
           >
-            Start Game
+            Set Sail!
           </button>
         </form>
       </div>
-    </div>
+    </Html>
   );
 };
 
