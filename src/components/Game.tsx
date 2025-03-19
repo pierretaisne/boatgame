@@ -11,6 +11,7 @@ import HealthBar from './HealthBar';
 import { ShipControls } from '../hooks/useShipControls';
 import UsernameInput from './UsernameInput';
 import CoinDisplay from './CoinDisplay';
+import MobileControls from './MobileControls';
 
 function Ocean() {
   const [water, setWater] = useState<Water | null>(null);
@@ -223,6 +224,36 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
     { position: [-120, 120], radius: 40 },
     { position: [120, -120], radius: 50 },
   ];
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Add mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Handle mobile controls
+  const handleMobileMove = (rotation: number, speed: number) => {
+    setPlayerShip(prev => ({
+      ...prev,
+      rotation,
+      speed
+    }));
+  };
+
+  const handleMobileFireLeft = () => {
+    handleFire(playerShip.position, playerShip.rotation, true);
+  };
+
+  const handleMobileFireRight = () => {
+    handleFire(playerShip.position, playerShip.rotation, false);
+  };
 
   // Update player ship position
   const handleShipUpdate = (newState: ShipControls) => {
@@ -686,6 +717,14 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
         enableDamping={true}
         dampingFactor={0.05}
       />
+
+      {gameStarted && isMobile && (
+        <MobileControls
+          onMove={handleMobileMove}
+          onFireLeft={handleMobileFireLeft}
+          onFireRight={handleMobileFireRight}
+        />
+      )}
     </>
   );
 }
