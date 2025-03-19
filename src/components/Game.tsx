@@ -11,6 +11,7 @@ import HealthBar from './HealthBar';
 import { ShipControls } from '../hooks/useShipControls';
 import UsernameInput from './UsernameInput';
 import CoinDisplay from './CoinDisplay';
+import Joystick from './Joystick';
 
 function Ocean() {
   const [water, setWater] = useState<Water | null>(null);
@@ -108,9 +109,11 @@ interface GameSceneProps {
   onGameStart: (username: string) => void;
   onCoinsChange: (coins: number) => void;
   gameStarted: boolean;
+  playerShip: ShipControls;
+  onPlayerShipUpdate: (newShip: ShipControls) => void;
 }
 
-function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) {
+function GameScene({ onGameStart, onCoinsChange, gameStarted, playerShip, onPlayerShipUpdate }: GameSceneProps) {
   const [selectedShip, setSelectedShip] = useState(0);
   const [bullets, setBullets] = useState<BulletData[]>([]);
   const [nextBulletId, setNextBulletId] = useState(0);
@@ -121,11 +124,6 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
   const controlsRef = useRef<any>();
   
   // Player ship state
-  const [playerShip, setPlayerShip] = useState<ShipControls>({
-    position: [0, 0, 0],
-    rotation: 0,
-    speed: 0,
-  });
   const [playerHealth, setPlayerHealth] = useState<ShipHealth>({
     maxHealth: 250,
     currentHealth: 250,
@@ -226,7 +224,7 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
 
   // Update player ship position
   const handleShipUpdate = (newState: ShipControls) => {
-    setPlayerShip(newState);
+    onPlayerShipUpdate(newState);
   };
 
   // Update camera target to follow player ship and handle health regeneration
@@ -697,6 +695,11 @@ export default function Game() {
   const [speedLevel, setSpeedLevel] = useState(1);
   const [armorLevel, setArmorLevel] = useState(1);
   const [firingLevel, setFiringLevel] = useState(1);
+  const [playerShip, setPlayerShip] = useState<ShipControls>({
+    position: [0, 0, 0],
+    rotation: 0,
+    speed: 0,
+  });
 
   const handleCoinsChange = (amount: number) => {
     setCoins(prev => prev + amount);
@@ -734,6 +737,21 @@ export default function Game() {
     fontWeight: '600',
     fontSize: '1.2rem',
     fontFamily: 'Outfit, Arial, sans-serif'
+  };
+
+  const handleJoystickMove = (x: number, y: number) => {
+    // Convert joystick movement to ship movement
+    // x: -1 to 1 (left to right)
+    // y: -1 to 1 (backward to forward)
+    const speed = Math.sqrt(x * x + y * y);
+    const angle = Math.atan2(x, y);
+    
+    // Update ship controls
+    setPlayerShip(prev => ({
+      ...prev,
+      rotation: angle,
+      speed: speed * 20 // Adjust this multiplier to control speed
+    }));
   };
 
   return (
@@ -789,6 +807,7 @@ export default function Game() {
               </span>
             </div>
           </div>
+          <Joystick onMove={handleJoystickMove} />
         </>
       )}
       <Canvas 
@@ -807,6 +826,8 @@ export default function Game() {
             }}
             onCoinsChange={handleCoinsChange}
             gameStarted={gameStarted}
+            playerShip={playerShip}
+            onPlayerShipUpdate={setPlayerShip}
           />
         </Suspense>
       </Canvas>
