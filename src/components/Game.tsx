@@ -716,6 +716,7 @@ function GameScene({ onGameStart, onCoinsChange, gameStarted }: GameSceneProps) 
         target={[playerShip.position[0], 0, playerShip.position[2]]}
         enableDamping={true}
         dampingFactor={0.05}
+        enabled={!isMobile}
       />
 
       {gameStarted && isMobile && (
@@ -736,6 +737,17 @@ export default function Game() {
   const [speedLevel, setSpeedLevel] = useState(1);
   const [armorLevel, setArmorLevel] = useState(1);
   const [firingLevel, setFiringLevel] = useState(1);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleCoinsChange = (amount: number) => {
     setCoins(prev => prev + amount);
@@ -792,7 +804,10 @@ export default function Game() {
             </div>
           </div>
 
-          <div style={statsContainerStyle}>
+          <div style={{
+            ...statsContainerStyle,
+            bottom: isMobile ? '220px' : '20px',
+          }}>
             <div style={containerStyle}>
               <img 
                 src="/lightning.png" 
@@ -828,7 +843,7 @@ export default function Game() {
       )}
       <Canvas 
         camera={{ 
-          position: [0, 20, 40],
+          position: isMobile ? [0, 30, 0] : [0, 20, 40],
           fov: 60,
           near: 0.1,
           far: 1000
