@@ -8,6 +8,7 @@ interface JoystickProps {
 const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
   const joystickRef = useRef<HTMLDivElement>(null);
   const nippleRef = useRef<any>(null);
+  const lastMoveRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!joystickRef.current) return;
@@ -18,8 +19,8 @@ const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
       position: { left: '50%', top: '50%' },
       color: 'white',
       size: 150,
-      threshold: 0.1,
-      fadeTime: 250,
+      threshold: 0.05,
+      fadeTime: 0,
       multitouch: false,
       maxNumberOfNipples: 1,
       dataOnly: false,
@@ -33,12 +34,33 @@ const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
 
     nippleRef.current.on('move', (evt: any, data: any) => {
       if (data.vector) {
-        onMove(data.vector.x, data.vector.y);
+        const targetX = data.vector.x;
+        const targetY = data.vector.y;
+        
+        const smoothFactor = 0.3;
+        
+        lastMoveRef.current = {
+          x: lastMoveRef.current.x + (targetX - lastMoveRef.current.x) * smoothFactor,
+          y: lastMoveRef.current.y + (targetY - lastMoveRef.current.y) * smoothFactor
+        };
+
+        onMove(lastMoveRef.current.x, -lastMoveRef.current.y);
       }
     });
 
     nippleRef.current.on('end', () => {
-      onMove(0, 0);
+      const smoothFactor = 0.3;
+      lastMoveRef.current = {
+        x: lastMoveRef.current.x * (1 - smoothFactor),
+        y: lastMoveRef.current.y * (1 - smoothFactor)
+      };
+      
+      if (Math.abs(lastMoveRef.current.x) < 0.01 && Math.abs(lastMoveRef.current.y) < 0.01) {
+        lastMoveRef.current = { x: 0, y: 0 };
+        onMove(0, 0);
+      } else {
+        onMove(lastMoveRef.current.x, -lastMoveRef.current.y);
+      }
     });
 
     return () => {
