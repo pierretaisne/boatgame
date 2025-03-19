@@ -17,7 +17,7 @@ const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
       mode: 'static' as const,
       position: { left: '50%', top: '50%' },
       color: 'white',
-      size: 120,
+      size: 150,
       threshold: 0.1,
       fadeTime: 250,
       multitouch: false,
@@ -25,6 +25,8 @@ const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
       dataOnly: false,
       lockX: false,
       lockY: false,
+      restOpacity: 0.5,
+      restJoystick: true,
     };
 
     nippleRef.current = nipplejs.create(options);
@@ -49,8 +51,12 @@ const Joystick: React.FC<JoystickProps> = ({ onMove }) => {
   return (
     <div 
       ref={joystickRef}
-      className="fixed bottom-8 left-8 w-32 h-32 sm:hidden"
-      style={{ touchAction: 'none' }}
+      className="fixed bottom-8 left-8 w-40 h-40 sm:hidden"
+      style={{ 
+        touchAction: 'none',
+        zIndex: 1000,
+        pointerEvents: 'auto'
+      }}
     />
   );
 };
