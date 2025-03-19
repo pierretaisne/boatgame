@@ -746,6 +746,7 @@ export default function Game() {
                 src="/coin.png" 
                 alt="coin" 
                 style={iconStyle}
+                className="w-6 h-6"
               />
               <span style={textStyle}>
                 {coins.toLocaleString()}
@@ -753,14 +754,15 @@ export default function Game() {
             </div>
           </div>
 
-          <div style={statsContainerStyle}>
+          <div className="absolute bottom-5 right-5 z-50 flex flex-col sm:flex-row gap-2 sm:gap-4">
             <div style={containerStyle}>
               <img 
                 src="/lightning.png" 
                 alt="speed" 
                 style={iconStyle}
+                className="w-4 h-4 sm:w-6 sm:h-6"
               />
-              <span style={textStyle}>
+              <span style={textStyle} className="text-sm sm:text-lg">
                 Speed {speedLevel}
               </span>
             </div>
@@ -769,8 +771,9 @@ export default function Game() {
                 src="/shield.png" 
                 alt="armor" 
                 style={iconStyle}
+                className="w-4 h-4 sm:w-6 sm:h-6"
               />
-              <span style={textStyle}>
+              <span style={textStyle} className="text-sm sm:text-lg">
                 Armor {armorLevel}
               </span>
             </div>
@@ -779,8 +782,9 @@ export default function Game() {
                 src="/bullet.png" 
                 alt="firing" 
                 style={iconStyle}
+                className="w-4 h-4 sm:w-6 sm:h-6"
               />
-              <span style={textStyle}>
+              <span style={textStyle} className="text-sm sm:text-lg">
                 Firing {firingLevel}
               </span>
             </div>
